@@ -30,41 +30,34 @@ contract StrategyAprOracle is AprOracleBase {
      * @param _delta The difference in debt.
      * @return . The expected apr for the strategy represented as 1e18.
      */
-    function aprAfterDebtChange(
-        address _strategy,
-        int256 _delta
-    ) external view override returns (uint256) {
-        address asset = IStrategyInterface(_strategy).asset();
+    function aprAfterDebtChange(address _strategy, int256 _delta) external view override returns (uint256) {
         address dToken = IStrategyInterface(_strategy).dToken();
+        address asset = IdToken(dToken).asset();
         uint256 marketId = IdToken(dToken).marketId();
         address margin = IdToken(dToken).DOLOMITE_MARGIN();
 
-        if(_delta == 0){
-            return(IMargin(margin).getMarketSupplyInterestRateApr(marketId));
-        }else{
-            address interestRateSetter = IMargin(margin).getMarketInterestRateSetter(marketId);
+        if (_delta == 0) {
+            return (IMargin(margin).getMarketSupplyInterestRateApr(marketId));
+        } else {
+            address interestRateSetter = IMargin(margin).getMarketInterestSetter(marketId);
             Types.TotalWei memory _wei = IMargin(margin).getMarketTotalWei(marketId);
             uint256 borrowed = uint256(_wei.borrow);
             uint256 supplied = uint256(_wei.supply);
-            if(_delta > 0){
+            if (_delta > 0) {
                 supplied += uint256(_delta);
-            }else {
+            } else {
                 supplied -= uint256(_delta * -1);
             }
-            // get borrowRate
-            //get earnings rate ()
-            //get partial = x * y /z
-
+            
             uint256 interestRate = IInterestRateSetter(interestRateSetter).getInterestRate(asset, borrowed, supplied); // borrow APR Per Second
             interestRate *= 31536000; // seconds in a year
             uint256 earningsRate = IMargin(margin).getMarketEarningsRateOverride(marketId);
-            if(earningsRate == 0){
+            if (earningsRate == 0) {
                 earningsRate = IMargin(margin).getEarningsRate();
             }
 
             interestRate = (interestRate * earningsRate * borrowed) / (supplied * 1e18); //borrowInterest * earningsRate for suppliers * ratio of borrow to supplies
             return interestRate;
         }
-
     }
 }
