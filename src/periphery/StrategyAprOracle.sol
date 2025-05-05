@@ -2,6 +2,11 @@
 pragma solidity ^0.8.18;
 
 import {AprOracleBase} from "@periphery/AprOracle/AprOracleBase.sol";
+import {IStrategyInterface} from "../interfaces/IStrategyInterface.sol";
+import {IInterestRateSetter} from "../interfaces/IInterestRateSetter.sol";
+import {IMargin} from "../interfaces/IMargin.sol";
+import {IdToken} from "../interfaces/IdToken.sol";
+import {Types} from "../interfaces/Types.sol";
 
 contract StrategyAprOracle is AprOracleBase {
     constructor() AprOracleBase("Strategy Apr Oracle Example", msg.sender) {}
@@ -29,8 +34,37 @@ contract StrategyAprOracle is AprOracleBase {
         address _strategy,
         int256 _delta
     ) external view override returns (uint256) {
-        // TODO: Implement any necessary logic to return the most accurate
-        //      APR estimation for the strategy.
-        return 1e17;
+        address asset = IStrategyInterface(_strategy).asset();
+        address dToken = IStrategyInterface(_strategy).dToken();
+        uint256 marketId = IdToken(dToken).marketId();
+        address margin = IdToken(dToken).DOLOMITE_MARGIN();
+
+        if(_delta == 0){
+            return(IMargin(margin).getMarketSupplyInterestRateApr(marketId));
+        }else{
+            address interestRateSetter = IMargin(margin).getMarketInterestRateSetter(marketId);
+            Types.TotalWei memory _wei = IMargin(margin).getMarketTotalWei(marketId);
+            uint256 borrowed = uint256(_wei.borrow);
+            uint256 supplied = uint256(_wei.supply);
+            if(_delta > 0){
+                supplied += uint256(_delta);
+            }else {
+                supplied -= uint256(_delta * -1);
+            }
+            // get borrowRate
+            //get earnings rate ()
+            //get partial = x * y /z
+
+            uint256 interestRate = IInterestRateSetter(interestRateSetter).getInterestRate(asset, borrowed, supplied); // borrow APR Per Second
+            interestRate *= 31536000; // seconds in a year
+            uint256 earningsRate = IMargin(margin).getMarketEarningsRateOverride(marketId);
+            if(earningsRate == 0){
+                earningsRate = IMargin(margin).getEarningsRate();
+            }
+
+            interestRate = (interestRate * earningsRate * borrowed) / (supplied * 1e18); //borrowInterest * earningsRate for suppliers * ratio of borrow to supplies
+            return interestRate;
+        }
+
     }
 }
